@@ -3,10 +3,10 @@
 Track system patches and customisations so you can cleanly undo them later.
 
 Works seamlessly with AI assistants:
-1. Let AI write the **patchlog** wrappers (*for the commands you want to track*) for you. See the [AI section](#using-with-ai-assistants),
-2. Export any **patchlog** session as JSON and hand it to an AI to diagnose what went wrong. See the [commands section](#commands).
+1. Let AI write the **patchlog** wrappers (*for the commands you want to track*) for you. See the [AI section](#using-with-ai-assistants).
+2. Export any **patchlog** session as JSON and hand it to an AI to diagnose what went wrong. See [Diagnosing with AI](#diagnosing-with-ai).
 
-**The model:** tell patchlog when you start doing something and when you stop. It snapshots system state at both ends, diffs them, and builds a teardown plan. When something breaks — or upstream ships a native fix — run `patchlog undo` and it
+**The model:** tell patchlog when you start doing something and when you stop. It snapshots system state at both ends, diffs them, and builds a teardown plan. When something breaks, or upstream ships a native fix, run `patchlog undo` and it
 reverses everything in the right order.
 
 Zero external dependencies. Pure Python 3.8+ stdlib.
@@ -35,7 +35,7 @@ sudo patchlog stop
 ```
 (*Alternatively, see the [AI section](#using-with-ai-assistants) instead of manually wrapping them*)
 
-Between start and stop patchlog doesn't intercept anything — you work normally.
+Between start and stop patchlog doesn't intercept anything: you work normally.
 On stop it diffs system state and writes a teardown plan.
 
 ### Before editing an existing system file
@@ -52,7 +52,7 @@ sudo patchlog new-file ~/tools/my-script      # homedir paths need this
 sudo patchlog new-file /opt/myapp/binary      # /opt subdirs need this
 ```
 
-> Files in auto-tracked paths (see below) are detected automatically — no `new-file` needed.
+> Files in auto-tracked paths (see below) are detected automatically: no `new-file` needed.
 
 ### Trial and error
 
@@ -78,12 +78,12 @@ sudo patchlog stop
 | udev rules | `/etc/udev/rules.d/` |
 | sysctl configs | `/etc/sysctl.d/` |
 | binaries | `/usr/local/bin/`, `/usr/local/sbin/`, `/usr/local/lib/` |
-| opt (top-level) | `/opt/` direct children — subdirs like `/opt/myapp/` need `new-file` |
+| opt (top-level) | `/opt/` direct children: subdirs like `/opt/myapp/` need `new-file` |
 | systemd unit files | `/etc/systemd/system/` (even if not enabled) |
 | boot | GRUB cmdline, initramfs mtimes |
 | firewall / cron | UFW rules, crontab |
 
-**Requires `patchlog track` or `patchlog new-file`:** anything else —
+**Requires `patchlog track` or `patchlog new-file`:** anything else:
 `/etc/fstab`, `/etc/default/grub`, homedir paths, `/opt/<subdir>/` files.
 
 ---
@@ -97,7 +97,7 @@ sudo patchlog undo <label>
 
 Teardown runs in the correct order: 
 
-stop services → remove DKMS → remove kernel configs → restore modified files → delete new files → apt remove → daemon-reload → update-grub / update-initramfs. Idempotent — missing artifacts are skipped cleanly.
+stop services → remove DKMS → remove kernel configs → restore modified files → delete new files → apt remove → daemon-reload → update-grub / update-initramfs. Idempotent: missing artifacts are skipped cleanly.
 
 ---
 
@@ -106,6 +106,33 @@ stop services → remove DKMS → remove kernel configs → restore modified fil
 Run `patchlog sysprompt` and paste the output as the first message in any AI chat (Claude, ChatGPT, etc.). The AI will automatically wrap all its suggested commands in patchlog sessions.
 
 The prompt is also available as [`sys_prompt.md`](sys_prompt.md). Regenerate it anytime: `patchlog sysprompt > sys_prompt.md`
+
+---
+
+## Diagnosing with AI
+
+If something goes wrong after a session: undo didn't clean (everything) up, a package left behind a config or artefacts, a service behaving oddly, export the session and paste it into any AI chat:
+
+```bash
+patchlog export <label>
+```
+
+This prints the full session as JSON: what was installed, what files were modified or created, the complete teardown plan, and any notes you added. The AI can read it and tell you exactly what patchlog did and what might still need attention.
+
+Example:
+
+```bash
+patchlog export nginx-test | xclip -selection clipboard
+# paste into ChatGPT / Claude: no sysprompt needed
+```
+
+The JSON includes:
+- `state_before` / `state_after`: full system snapshots at session open and close
+- `teardown`: the ordered list of undo steps patchlog built
+- `new_files`, `modified_files`: paths registered and snapshotted
+- `notes`: anything you added with `patchlog note`
+
+> `export` does not need `sudo`: it reads the stored session and prints it.
 
 ---
 
@@ -134,5 +161,5 @@ Write commands need `sudo`. Read commands (`list`, `show`, `export`, `check`) do
 
 ## Example with ChatGPT
 
-See [example-chatgpt.md](example-chatgpt.md) — a real session with ChatGPT-4o mini (free tier), including an honest review of what it got right and where it fell short.
+See [example-chatgpt.md](example-chatgpt.md): a real session with ChatGPT-4o mini (free tier), including an honest review of what it got right and where it fell short.
 
