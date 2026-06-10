@@ -1,0 +1,17 @@
+#!/bin/bash
+# Regenerate sys_prompt.md from _SYSPROMPT in patchlog/cli.py before every commit.
+# Runs without needing patchlog installed — reads source directly.
+
+set -e
+
+REPO_ROOT="$(git rev-parse --show-toplevel)"
+cd "$REPO_ROOT"
+
+python3 - > sys_prompt.md << 'PYEOF'
+import sys
+sys.path.insert(0, '.')
+from patchlog.cli import _SYSPROMPT
+print(_SYSPROMPT, end='')
+PYEOF
+
+git add sys_prompt.md

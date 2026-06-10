@@ -1,0 +1,12 @@
+[build-system]
+requires = ["setuptools>=64"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "patchlog"
+version = "0.2.0"
+description = "Track system patches and customisations so you can cleanly undo them"
+requires-python = ">=3.8"
+
+[project.scripts]
+patchlog = "patchlog.cli:main"
