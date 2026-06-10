@@ -1,0 +1,8 @@
+.env
+
+temp*
+tmp*
+
+.claude*
+CLAUDE
+.CLAUDE
