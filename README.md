@@ -111,7 +111,7 @@ The prompt is also available as [`sys_prompt.md`](sys_prompt.md). Regenerate it 
 
 | Command | What it does |
 |---|---|
-| `patchlog init` | Create `/var/lib/patchlog` (once, needs sudo) |
+| `patchlog init` | Create `/var/lib/patchlog` |
 | `patchlog start <label>` | Begin a session, snapshot state now |
 | `patchlog stop` | End session, diff, build teardown plan |
 | `patchlog track <path>` | Snapshot a file before you edit it |
