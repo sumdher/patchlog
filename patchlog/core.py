@@ -41,6 +41,14 @@ _WATCHED_DIRS = [
     "/opt",             # flat only — files directly in /opt, not in subdirs like /opt/myapp/
 ]
 
+# Directories that must never be deleted by patchlog, even if they appear in new_dirs.
+_PROTECTED_DIRS = frozenset({
+    "/", "/home", "/root", "/etc", "/usr", "/usr/local",
+    "/usr/local/bin", "/usr/local/sbin", "/usr/local/lib",
+    "/opt", "/var", "/boot", "/bin", "/sbin", "/lib", "/lib64",
+    "/tmp", "/run", "/sys", "/proc", "/dev", "/srv", "/media", "/mnt", "/snap",
+})
+
 
 # ---------------------------------------------------------------------------
 # DB helpers + file locking
@@ -344,7 +352,30 @@ def snapshot_script(label: str, url_or_path: str) -> str:
 # Teardown sequence
 # ---------------------------------------------------------------------------
 
-def build_teardown(diff: dict, modified_files: list, new_files: list) -> list:
+def collect_session_new_dirs(path_str: str, already_tracked: list) -> list:
+    """
+    Walk from the immediate parent of path_str upward.
+    Return directories that do not yet exist and are not system-protected,
+    stopping as soon as we hit an existing directory.
+    Result is innermost-first (correct deletion order).
+    Skips paths already in already_tracked.
+    """
+    already_set = set(already_tracked)
+    new_dirs = []
+    for parent in Path(path_str).parents:
+        parent_str = str(parent)
+        if parent_str in _PROTECTED_DIRS or parent == Path("/"):
+            break
+        if not parent.exists():
+            if parent_str not in already_set:
+                new_dirs.append(parent_str)
+        else:
+            break  # hit an existing directory — stop here
+    return new_dirs
+
+
+def build_teardown(diff: dict, modified_files: list, new_files: list,
+                   new_dirs: list = None, session_started_at: str = None) -> list:
     """
     Build an ordered teardown sequence.
 
@@ -413,6 +444,17 @@ def build_teardown(diff: dict, modified_files: list, new_files: list) -> list:
             all_new_files.append(f)
     for nf in all_new_files:
         steps.append({"type": "file_delete", "path": nf})
+
+    # 8b. Remove session-created directories (deepest first so parents empty before deletion).
+    # Only dirs recorded as non-existent at new-file/track registration time.
+    # execute_teardown does an additional timestamp + rmdir (non-empty safe) check.
+    if new_dirs:
+        for nd in sorted(new_dirs, key=lambda d: d.count("/"), reverse=True):
+            steps.append({
+                "type": "dir_delete",
+                "path": nd,
+                "session_started_at": session_started_at,
+            })
 
     # 9. apt remove net-new packages
     pkgs = diff.get("apt_packages_added", [])
@@ -581,6 +623,43 @@ def execute_teardown(steps: list, dry_run: bool = False) -> list:
                     Path(path).unlink(missing_ok=True)
                 res["success"] = True
 
+            elif t == "dir_delete":
+                path = step["path"]
+                session_started_at = step.get("session_started_at")
+                print(f"  {prefix}rmdir {path}  (if empty and session-created)")
+                if not dry_run:
+                    p = Path(path)
+                    skip_reason = None
+                    if not p.exists():
+                        skip_reason = "already gone"
+                    elif not p.is_dir():
+                        skip_reason = "not a directory"
+                    elif str(p) in _PROTECTED_DIRS:
+                        skip_reason = "protected system path"
+                    elif session_started_at:
+                        try:
+                            dir_ctime = p.stat().st_ctime
+                            session_ts = datetime.fromisoformat(session_started_at).timestamp()
+                            if dir_ctime < session_ts - 1:
+                                skip_reason = "predates session start"
+                        except Exception:
+                            pass
+                    if skip_reason:
+                        res["success"] = True
+                        res["output"] = f"skipped: {skip_reason}"
+                        if skip_reason != "already gone":
+                            print(f"    skipped: {skip_reason}")
+                    else:
+                        try:
+                            p.rmdir()  # atomic: raises OSError if non-empty — safe by design
+                            res["success"] = True
+                        except OSError:
+                            res["success"] = True  # non-empty dir: intentionally left in place
+                            res["output"] = "not empty — left in place"
+                            print(f"    not empty — left in place")
+                else:
+                    res["success"] = True
+
             elif t == "apt_remove":
                 pkgs = step["packages"]
                 print(f"  {prefix}apt remove --autoremove {' '.join(pkgs)}")
@@ -736,6 +815,10 @@ def check_artifacts(session: dict) -> list:
                 "type": "new_file", "name": nf, "present": present,
                 "note": "(auto-detected)",
             })
+
+    for nd in session.get("new_dirs", []):
+        present = Path(nd).exists()
+        results.append({"type": "new_dir", "name": nd, "present": present, "note": ""})
 
     return results
 

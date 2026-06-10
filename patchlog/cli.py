@@ -1,32 +1,146 @@
 #!/usr/bin/env python3
 """
-patchlog — track system changes, patches and customisations so you can undo them later.
+NAME
+    patchlog — track system changes so you can cleanly undo them later
 
-COMMANDS
-  init                          Set up /var/lib/patchlog (run once, needs sudo)
-  start  <label> [options]      Begin recording a session
-  stop   [options]              Stop recording, compute diff, build teardown plan
-  track  <path>                 Snapshot a file's CURRENT content mid-session
-                                (call this BEFORE you edit the file)
-  new-file <path>               Register a new file you are about to create
-  note   <text>                 Append a free-text note to the active session
-  status                        Show the active session and elapsed time
-  list                          List all sessions
-  show   <label>                Full detail of a session
-  undo   <label> [--dry-run]    Reverse a session using its teardown plan
-  check  <label>                Check if session artifacts still exist
-  export <label>                Print session JSON to stdout (pipe to AI tools)
-  sysprompt                     Print the AI assistant system prompt to stdout
-  abandon                       Discard the active session without saving
-  delete <label>                Permanently remove a completed session and its snapshots
+SYNOPSIS
+    patchlog <command> [args]
+    sudo patchlog <command> [args]    # write commands need root
 
-OPTIONS for start:
-  --note=<text>                 What this session is for
-  --script=<url_or_path>        Snapshot a remote/local script for reproducibility
-                                (can be repeated)
-  --branch=<label>              Fork from an existing session's BEFORE state.
-                                Use for trial-and-error: each attempt starts from
-                                the same clean baseline regardless of what you undid.
+DESCRIPTION
+    patchlog snapshots system state before and after a session, diffs the two
+    snapshots, and builds an ordered teardown plan. Run 'undo' at any time to
+    reverse everything in the right order: stop services, restore files, remove
+    packages, reload daemons.
+
+    Works with any AI assistant: run 'patchlog sysprompt' and paste the output
+    as the first message. The AI wraps all its suggested commands automatically.
+
+COMMANDS — Session management
+
+    init
+        Create /var/lib/patchlog and initialise the store. Run once with sudo.
+
+    start <label> [--note=<text>] [--script=<url>] [--branch=<label>]
+        Begin a session. Snapshots system state now.
+        --note=<text>         One-line description of what you are doing.
+        --script=<url|path>   Download and snapshot a remote/local script.
+        --branch=<label>      Fork from an existing session's baseline — useful
+                              for trial-and-error where each attempt diffs against
+                              the same clean state.
+
+    stop
+        End the active session. Diffs system state, builds and saves the teardown
+        plan. Nothing is undone yet.
+
+    abandon
+        Discard the active session without saving any teardown plan.
+
+COMMANDS — Mid-session file tracking
+
+    track <path>
+        Snapshot a file's current content BEFORE you edit it. Call this
+        immediately before the command that modifies the file — never after.
+        If the path does not exist yet, it is registered as a new file instead
+        (will be deleted on undo).
+
+    new-file <path>
+        Register a file you are about to create, so it is deleted on undo.
+        Also records any parent directories that do not yet exist — they are
+        removed on undo if empty after the file is deleted.
+        Not needed for auto-tracked paths (see WHAT IS TRACKED below).
+
+    note <text>
+        Append a free-text note to the active session.
+
+COMMANDS — Review and diagnosis
+
+    status
+        Show the active session label and elapsed time.
+
+    list
+        List all recorded sessions with date, status, and note.
+
+    show <label>
+        Print full detail: diff, tracked files, new files, teardown plan.
+
+    check <label>
+        Check whether each artifact from the session still exists on disk.
+        Useful after 'apt upgrade' to see if upstream has incorporated a fix.
+
+    export <label>
+        Print the full session as JSON to stdout. Pipe to an AI assistant for
+        diagnosis when something did not undo cleanly.
+        Example:  patchlog export my-fix | xclip -selection clipboard
+
+COMMANDS — Undo
+
+    undo <label> [--dry-run]
+        Reverse the session in teardown order:
+            stop services → restore files → delete new files →
+            remove new dirs (if empty) → apt remove → daemon-reload → update-grub
+        --dry-run   Print what would happen without making any changes.
+
+COMMANDS — Maintenance
+
+    delete <label>
+        Permanently remove a session record and its file snapshots from disk.
+
+    sysprompt
+        Print the AI assistant system prompt (includes current system info).
+        Paste into any AI chat before asking for Linux help.
+
+WHAT IS TRACKED AUTOMATICALLY
+    These are diffed before/after the session — no 'new-file' needed:
+
+      apt packages          net-new installs only
+      systemd units         enabled/disabled state
+      DKMS modules          any
+      modprobe/modules-load /etc/modprobe.d/, /etc/modules-load.d/
+      udev rules            /etc/udev/rules.d/
+      sysctl configs        /etc/sysctl.d/
+      binaries              /usr/local/bin/, /usr/local/sbin/, /usr/local/lib/
+      opt (top-level)       /opt/ direct children only
+      systemd unit files    /etc/systemd/system/
+      boot                  GRUB cmdline, initramfs mtimes
+      firewall / cron       UFW rules, crontab
+
+    Requires 'track' or 'new-file' for everything else:
+      /etc/fstab, /etc/default/grub, /etc/hosts, /etc/NetworkManager/...
+      ~/ paths, /opt/<subdir>/file
+
+EXAMPLES
+    Basic workflow:
+        sudo patchlog start speaker-fix --note="HDMI audio dropout fix"
+        sudo patchlog track /etc/pulse/default.pa
+        sudo nano /etc/pulse/default.pa
+        sudo patchlog stop
+        sudo patchlog undo speaker-fix
+
+    Trial and error:
+        sudo patchlog start attempt-1 --note="try approach A"
+        sudo patchlog stop
+        sudo patchlog undo attempt-1
+        sudo patchlog start attempt-2 --branch=attempt-1
+        sudo patchlog stop
+
+    AI-assisted workflow:
+        patchlog sysprompt        # paste output into ChatGPT / Claude first
+
+    Dry-run before committing:
+        sudo patchlog undo my-fix --dry-run
+
+    Export for AI diagnosis:
+        patchlog export broken-session | xclip -selection clipboard
+
+STORE
+    Default:  /var/lib/patchlog
+    Override: set PATCHLOG_DIR environment variable
+
+PERMISSIONS
+    Write commands (need sudo):  init, start, stop, track, new-file, note,
+                                 undo, abandon, delete
+    Read commands (no sudo):     list, show, export, check, status, sysprompt
 """
 
 from __future__ import annotations
@@ -45,6 +159,7 @@ from patchlog.core import (
     active_label, set_active,
     capture_state, diff_states, has_changes,
     snapshot_file_original, snapshot_script,
+    collect_session_new_dirs,
     build_teardown, execute_teardown,
     check_artifacts, gather_sysinfo,
 )
@@ -130,6 +245,7 @@ def cmd_start(args: list):
             "diff": None,
             "modified_files": [],   # files snapshotted via 'patchlog track'
             "new_files": [],        # files explicitly registered via 'patchlog new-file'
+            "new_dirs": [],         # parent dirs that didn't exist at new-file/track time
             "scripts_snapshotted": snapshotted_scripts,
             "notes": [],   # populated by 'patchlog note' mid-session only
             "teardown_sequence": [],
@@ -168,6 +284,8 @@ def cmd_stop(args: list):
             diff,
             session.get("modified_files", []),
             session.get("new_files", []),
+            new_dirs=session.get("new_dirs", []),
+            session_started_at=session.get("started_at"),
         )
 
         session["status"] = "complete"
@@ -220,7 +338,19 @@ def cmd_track(args: list):
             })
             save_db(db)
         except FileNotFoundError:
-            _die(f"{path} does not exist")
+            # File doesn't exist yet — register for deletion on undo instead of failing.
+            # Common case: 'patchlog track /etc/motd' before 'tee /etc/motd' on a system
+            # where the file is absent. Using _die/exit here causes silent data loss when
+            # bash scripts don't have set -e.
+            if path not in session.get("new_files", []):
+                session.setdefault("new_files", []).append(path)
+            new_dirs = collect_session_new_dirs(path, session.get("new_dirs", []))
+            for d in new_dirs:
+                session.setdefault("new_dirs", []).append(d)
+            save_db(db)
+            print(f"Note: '{path}' does not exist yet.")
+            print(f"  Registered as new file — it will be deleted on undo.")
+            return
 
     print(f"Tracked: {path}")
     print(f"  Original saved to: {snap}")
@@ -241,7 +371,10 @@ def cmd_new_file(args: list):
         session = get_session(db, label)
         if path not in session.get("new_files", []):
             session.setdefault("new_files", []).append(path)
-            save_db(db)
+        new_dirs = collect_session_new_dirs(path, session.get("new_dirs", []))
+        for d in new_dirs:
+            session.setdefault("new_dirs", []).append(d)
+        save_db(db)
 
     print(f"Registered new file: {path}  (will be deleted on undo)")
 
@@ -402,6 +535,12 @@ def cmd_show(args: list):
         print(f"\nNew files (deleted on undo):")
         for f in nf:
             print(f"  {f}")
+
+    nd = session.get("new_dirs", [])
+    if nd:
+        print(f"\nNew directories (rmdir on undo if empty and session-created):")
+        for d in nd:
+            print(f"  {d}")
 
     scripts = session.get("scripts_snapshotted", [])
     if scripts:
@@ -569,6 +708,8 @@ def _describe_step(step: dict) -> str:
         return f"restore {step['path']} from snapshot"
     elif t == "file_delete":
         return f"delete {step['path']}"
+    elif t == "dir_delete":
+        return f"rmdir {step['path']}  (if empty and session-created)"
     elif t == "apt_remove":
         return f"apt remove --autoremove {' '.join(step['packages'])}"
     elif t == "cron_remove":
@@ -734,6 +875,30 @@ sudo patchlog stop
 
 ---
 
+### After suggesting undo
+
+After every `sudo patchlog undo <label>`, **always append** a verification block
+so the user can confirm the teardown was complete. Tailor it to what the session
+actually contained — only include checks relevant to what was undone:
+
+```bash
+# packages removed
+dpkg -l <pkg> 2>/dev/null | grep -q ^ii && echo "WARNING: still installed" || echo "removed ✓"
+
+# files gone
+ls <path> 2>/dev/null && echo "WARNING: still present" || echo "gone ✓"
+
+# service disabled
+systemctl is-enabled <service> 2>/dev/null | grep -qv enabled && echo "disabled ✓" || echo "WARNING: still enabled"
+
+# directories gone (if a new dir was created)
+ls -ld <dir> 2>/dev/null && echo "still exists (may have other contents)" || echo "gone ✓"
+```
+
+Use `patchlog check <label>` as a quick one-liner when the session had many artifacts.
+
+---
+
 ### Notes
 
 - patchlog is already installed. Never suggest installing it.
@@ -760,6 +925,10 @@ def main():
 
     cmd = args[0]
     rest = args[1:]
+
+    if cmd in ("-h", "--help", "help"):
+        print(__doc__)
+        sys.exit(0)
 
     dispatch = {
         "init":       lambda: cmd_init(),

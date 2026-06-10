@@ -144,6 +144,30 @@ sudo patchlog stop
 
 ---
 
+### After suggesting undo
+
+After every `sudo patchlog undo <label>`, **always append** a verification block
+so the user can confirm the teardown was complete. Tailor it to what the session
+actually contained — only include checks relevant to what was undone:
+
+```bash
+# packages removed
+dpkg -l <pkg> 2>/dev/null | grep -q ^ii && echo "WARNING: still installed" || echo "removed ✓"
+
+# files gone
+ls <path> 2>/dev/null && echo "WARNING: still present" || echo "gone ✓"
+
+# service disabled
+systemctl is-enabled <service> 2>/dev/null | grep -qv enabled && echo "disabled ✓" || echo "WARNING: still enabled"
+
+# directories gone (if a new dir was created)
+ls -ld <dir> 2>/dev/null && echo "still exists (may have other contents)" || echo "gone ✓"
+```
+
+Use `patchlog check <label>` as a quick one-liner when the session had many artifacts.
+
+---
+
 ### Notes
 
 - patchlog is already installed. Never suggest installing it.
