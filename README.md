@@ -2,6 +2,8 @@
 
 Track system patches and customisations so you can cleanly undo them later.
 
+Works seamlessly with AI assistants. See the [AI section](#using-with-ai-assistants)
+
 **The model:** tell patchlog when you start doing something and when you stop.
 It snapshots system state at both ends, diffs them, and builds a teardown plan.
 When something breaks — or upstream ships a native fix — run `patchlog undo` and it
@@ -31,6 +33,7 @@ sudo patchlog start <label> --note="what you're doing"
     # ... do your work freely ...
 sudo patchlog stop
 ```
+(*Alternatively, see the [AI section](#using-with-ai-assistants) instead of manually wrapping them*)
 
 Between start and stop patchlog doesn't intercept anything — you work normally.
 On stop it diffs system state and writes a teardown plan.
