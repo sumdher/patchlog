@@ -2,7 +2,9 @@
 
 Track system patches and customisations so you can cleanly undo them later.
 
-Works seamlessly with AI assistants — [let AI write the **patchlog** wrappers (*for the commands you want to track*) for you](#using-with-ai-assistants), or [export any **patchlog** session as JSON](#commands) and hand it to an AI to diagnose what went wrong.
+Works seamlessly with AI assistants:
+1. Let AI write the **patchlog** wrappers (*for the commands you want to track*) for you. See the [AI section](#using-with-ai-assistants),
+2. Export any **patchlog** session as JSON and hand it to an AI to diagnose what went wrong. See the [commands section](#commands).
 
 **The model:** tell patchlog when you start doing something and when you stop. It snapshots system state at both ends, diffs them, and builds a teardown plan. When something breaks — or upstream ships a native fix — run `patchlog undo` and it
 reverses everything in the right order.
