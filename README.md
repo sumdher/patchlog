@@ -14,6 +14,8 @@ Zero external dependencies. Pure Python 3.8+ stdlib.
 ## Install
 
 ```bash
+git clone https://github.com/srsudhir31/patchlog
+cd patchlog
 pip install --break-system-packages -e .
 
 # Initialise the store (once, needs root):
