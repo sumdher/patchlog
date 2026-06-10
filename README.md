@@ -128,3 +128,9 @@ The prompt is also available as [`sys_prompt.md`](sys_prompt.md). Regenerate it 
 | `patchlog sysprompt` | Print the AI assistant system prompt |
 
 Write commands need `sudo`. Read commands (`list`, `show`, `export`, `check`) do not.
+
+
+## Example with ChatGPT
+
+See [example-chatgpt.md](example-chatgpt.md) — a real session with ChatGPT-4o mini (free tier), including an honest review of what it got right and where it fell short.
+
