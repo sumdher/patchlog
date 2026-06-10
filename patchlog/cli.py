@@ -46,7 +46,7 @@ from patchlog.core import (
     capture_state, diff_states, has_changes,
     snapshot_file_original, snapshot_script,
     build_teardown, execute_teardown,
-    check_artifacts,
+    check_artifacts, gather_sysinfo,
 )
 
 
@@ -745,6 +745,7 @@ sudo patchlog stop
 
 def cmd_sysprompt():
     print(_SYSPROMPT)
+    print(gather_sysinfo())
 
 
 # ---------------------------------------------------------------------------

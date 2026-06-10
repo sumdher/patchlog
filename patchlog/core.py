@@ -738,3 +738,52 @@ def check_artifacts(session: dict) -> list:
             })
 
     return results
+
+
+# ---------------------------------------------------------------------------
+# System info for AI assistant context
+# ---------------------------------------------------------------------------
+
+def gather_sysinfo() -> str:
+    """
+    Return a Markdown snippet describing the current system.
+    Appended to the sysprompt so the AI has hardware/OS context.
+    """
+    lines = ["## Current system\n"]
+
+    # OS
+    os_name = _run(["lsb_release", "-ds"]).strip()
+    if not os_name:
+        try:
+            for line in Path("/etc/os-release").read_text().splitlines():
+                if line.startswith("PRETTY_NAME="):
+                    os_name = line.split("=", 1)[1].strip('"')
+                    break
+        except Exception:
+            os_name = "unknown"
+    lines.append(f"- **OS:** {os_name}")
+
+    # Kernel + architecture
+    kernel = _run(["uname", "-r"]).strip()
+    arch   = _run(["uname", "-m"]).strip()
+    lines.append(f"- **Kernel:** {kernel}  ({arch})")
+
+    # Hardware model (readable without root via sysfs)
+    try:
+        vendor  = Path("/sys/class/dmi/id/sys_vendor").read_text().strip()
+        product = Path("/sys/class/dmi/id/product_name").read_text().strip()
+        lines.append(f"- **Hardware:** {vendor} {product}")
+    except Exception:
+        pass
+
+    # Desktop environment + display server
+    desktop = os.environ.get("XDG_CURRENT_DESKTOP") or os.environ.get("DESKTOP_SESSION", "").strip()
+    if desktop:
+        display = "Wayland" if os.environ.get("WAYLAND_DISPLAY") else "X11" if os.environ.get("DISPLAY") else ""
+        lines.append(f"- **Desktop:** {desktop}" + (f"  ({display})" if display else ""))
+
+    # Active DKMS modules — directly relevant for driver fix context
+    dkms = _run(["dkms", "status"]).strip()
+    lines.append(f"- **DKMS modules:** {dkms if dkms else 'none'}")
+
+    return "\n".join(lines)
