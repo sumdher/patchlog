@@ -4,9 +4,7 @@ Track system patches and customisations so you can cleanly undo them later.
 
 Works seamlessly with AI assistants. See the [AI section](#using-with-ai-assistants)
 
-**The model:** tell patchlog when you start doing something and when you stop.
-It snapshots system state at both ends, diffs them, and builds a teardown plan.
-When something breaks — or upstream ships a native fix — run `patchlog undo` and it
+**The model:** tell patchlog when you start doing something and when you stop. It snapshots system state at both ends, diffs them, and builds a teardown plan. When something breaks — or upstream ships a native fix — run `patchlog undo` and it
 reverses everything in the right order.
 
 Zero external dependencies. Pure Python 3.8+ stdlib.
@@ -95,20 +93,17 @@ sudo patchlog undo <label> --dry-run   # preview first
 sudo patchlog undo <label>
 ```
 
-Teardown runs in the correct order: stop services → remove DKMS → remove kernel
-configs → restore modified files → delete new files → apt remove → daemon-reload →
-update-grub / update-initramfs. Idempotent — missing artifacts are skipped cleanly.
+Teardown runs in the correct order: 
+
+stop services → remove DKMS → remove kernel configs → restore modified files → delete new files → apt remove → daemon-reload → update-grub / update-initramfs. Idempotent — missing artifacts are skipped cleanly.
 
 ---
 
 ## Using with AI assistants
 
-Run `patchlog sysprompt` and paste the output as the first message in any AI chat
-(Claude, ChatGPT, etc.). The AI will automatically wrap all its suggested commands
-in patchlog sessions — you don't need to think about it.
+Run `patchlog sysprompt` and paste the output as the first message in any AI chat (Claude, ChatGPT, etc.). The AI will automatically wrap all its suggested commands in patchlog sessions.
 
-The prompt is also available as [`sys_prompt.md`](sys_prompt.md).  
-Regenerate it anytime: `patchlog sysprompt > sys_prompt.md`
+The prompt is also available as [`sys_prompt.md`](sys_prompt.md). Regenerate it anytime: `patchlog sysprompt > sys_prompt.md`
 
 ---
 
